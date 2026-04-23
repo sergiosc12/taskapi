@@ -20,7 +20,7 @@ app.use((req, res, next) => {
 // Rutas
 const taskRoutes = require('./routes/tasks');
 app.use('/api/tasks', taskRoutes);
-
+// Ejemplo
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
