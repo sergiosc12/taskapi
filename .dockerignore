@@ -1,0 +1,15 @@
+# .dockerignore — Archivos a excluir del contexto de Docker
+# Similar a .gitignore pero para Docker builds
+# Excluir estos archivos hace el build más rápido y la imagen más pequeña
+
+node_modules/        # Docker instala sus propias dependencias
+npm-debug.log        # Logs de desarrollo
+.git/                # Historial de Git (no necesario en la imagen)
+.gitignore
+.eslintrc.js         # Herramientas de desarrollo
+tests/               # Tests no van en producción
+coverage/            # Reportes de cobertura
+*.md                 # Documentación
+.env                 # Variables de entorno locales (¡NUNCA en la imagen!)
+.env.*
+docs/

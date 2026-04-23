@@ -1,0 +1,334 @@
+# ============================================================
+# .github/workflows/ci.yml — Pipeline CI/CD con DevSecOps
+# ============================================================
+# Este archivo define el pipeline automatizado que se ejecuta
+# cada vez que alguien hace un push o pull request al repositorio.
+#
+# CI = Continuous Integration  (integrar y validar cambios)
+# CD = Continuous Delivery     (entregar de forma automatizada)
+# ============================================================
+
+name: "🚀 CI/CD Pipeline — TaskAPI DevSecOps"
+
+# ── DISPARADORES (Triggers) ──────────────────────────────────
+# ¿Cuándo se ejecuta este pipeline?
+on:
+  push:
+    branches:
+      - main        # Cuando se hace push a la rama principal
+      - develop     # O a la rama de desarrollo
+  pull_request:
+    branches:
+      - main        # Cuando se abre un Pull Request hacia main
+
+# ── VARIABLES GLOBALES DE ENTORNO ────────────────────────────
+# Disponibles en todos los jobs del pipeline
+env:
+  NODE_VERSION: "20"
+  IMAGE_NAME: "taskapi"
+  # APP_VERSION se calcula dinámicamente abajo usando el SHA del commit
+
+# ============================================================
+# JOBS: Son las "etapas" del pipeline
+# Cada job corre en una máquina virtual limpia (Ubuntu en GitHub)
+# ============================================================
+jobs:
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 1: INSTALACIÓN Y BUILD
+  # Propósito: Verificar que el proyecto se instala sin errores
+  # ──────────────────────────────────────────────────────────
+  install-and-build:
+    name: "📦 Instalación y Build"
+    runs-on: ubuntu-latest   # Máquina virtual Ubuntu gratuita de GitHub
+
+    steps:
+      # Paso 1: Descargar el código del repositorio
+      - name: "⬇️ Checkout del código"
+        uses: actions/checkout@v4
+        # Sin este paso, el runner no tiene el código fuente
+
+      # Paso 2: Configurar la versión de Node.js
+      - name: "🔧 Configurar Node.js ${{ env.NODE_VERSION }}"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"   # Cachea node_modules entre ejecuciones → más rápido
+
+      # Paso 3: Instalar dependencias
+      # npm ci es más seguro que npm install: usa package-lock.json exacto
+      - name: "📥 Instalar dependencias"
+        run: npm ci
+
+      # Paso 4: Verificar que la app puede iniciarse
+      - name: "✅ Verificar arranque de la aplicación"
+        run: |
+          node -e "require('./src/app'); console.log('✅ App cargada sin errores')"
+
+      # Paso 5: Guardar node_modules para jobs posteriores (evitar reinstalar)
+      - name: "💾 Cachear dependencias instaladas"
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 2: ANÁLISIS DE CALIDAD DE CÓDIGO (SAST básico)
+  # Propósito: Detectar problemas en el código sin ejecutarlo
+  # SAST = Static Application Security Testing
+  # ──────────────────────────────────────────────────────────
+  code-quality:
+    name: "🔍 Calidad de Código (SAST básico)"
+    runs-on: ubuntu-latest
+    needs: install-and-build   # Solo corre si el job anterior pasó
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: "📥 Instalar dependencias"
+        run: npm ci
+
+      # ESLint analiza el código estáticamente buscando:
+      # - Variables sin usar (posible código muerto)
+      # - Uso de eval() (riesgo de seguridad)
+      # - Ausencia de punto y coma (estilo)
+      # - Comparaciones débiles con == en vez de ===
+      - name: "🔎 Análisis estático con ESLint (SAST)"
+        run: |
+          echo "🔍 Ejecutando análisis estático de código..."
+          echo "   ESLint revisa el código sin ejecutarlo"
+          echo "   Busca errores, malas prácticas y riesgos de seguridad"
+          npm run lint
+          echo "✅ Análisis SAST completado sin errores"
+
+      # Verificar que no hay archivos con datos sensibles hardcodeados
+      # En producción usaríamos herramientas como truffleHog o git-secrets
+      - name: "🔐 Verificar secretos hardcodeados"
+        run: |
+          echo "🔍 Buscando posibles secretos en el código..."
+          # Busca patrones comunes de secretos (API keys, passwords hardcodeadas)
+          if grep -rn --include="*.js" \
+            -e "password\s*=\s*['\"][^'\"]\+['\"]" \
+            -e "api_key\s*=\s*['\"][^'\"]\+['\"]" \
+            -e "secret\s*=\s*['\"][^'\"]\+['\"]" \
+            src/; then
+            echo "❌ Se encontraron posibles secretos hardcodeados"
+            exit 1
+          fi
+          echo "✅ No se encontraron secretos hardcodeados"
+
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 3: TESTS AUTOMATIZADOS
+  # Propósito: Verificar que la funcionalidad es correcta
+  # ──────────────────────────────────────────────────────────
+  tests:
+    name: "🧪 Tests y Cobertura"
+    runs-on: ubuntu-latest
+    needs: install-and-build
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: "📥 Instalar dependencias"
+        run: npm ci
+
+      # Ejecutar todos los tests y medir cobertura de código
+      # Cobertura = % del código que está cubierto por tests
+      # Configuramos un umbral mínimo del 70% en package.json
+      - name: "🧪 Ejecutar tests con cobertura"
+        run: |
+          echo "🧪 Ejecutando suite de tests..."
+          npm run test:ci
+          echo "✅ Todos los tests pasaron"
+
+      # Publicar el reporte de cobertura como artefacto del pipeline
+      # Permite ver el reporte en la interfaz de GitHub Actions
+      - name: "📊 Publicar reporte de cobertura"
+        uses: actions/upload-artifact@v4
+        if: always()   # Se ejecuta aunque fallen los tests
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 4: ANÁLISIS DE VULNERABILIDADES EN DEPENDENCIAS (SCA)
+  # SCA = Software Composition Analysis
+  # Revisa si las librerías que usamos tienen vulnerabilidades conocidas
+  # ──────────────────────────────────────────────────────────
+  security-sca:
+    name: "🛡️ Análisis de Seguridad (SCA)"
+    runs-on: ubuntu-latest
+    needs: install-and-build
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: "📥 Instalar dependencias"
+        run: npm ci
+
+      # npm audit revisa las dependencias contra la base de datos de CVEs
+      # CVE = Common Vulnerabilities and Exposures (vulnerabilidades conocidas)
+      # --audit-level=high: falla solo si hay vulnerabilidades altas o críticas
+      - name: "🔍 Auditoría de dependencias con npm audit (SCA)"
+        run: |
+          echo "🔍 Analizando dependencias en busca de vulnerabilidades..."
+          echo "   Comparando contra base de datos de CVEs conocidas"
+          npm audit --audit-level=high || {
+            echo "⚠️  Se encontraron vulnerabilidades de nivel ALTO o CRÍTICO"
+            echo "    Ejecuta 'npm audit fix' para corregirlas"
+            exit 1
+          }
+          echo "✅ No se encontraron vulnerabilidades críticas"
+
+      # Verificar que las dependencias están "pinneadas" (versiones exactas)
+      - name: "📌 Verificar integridad de dependencias"
+        run: |
+          echo "🔍 Verificando integridad de package-lock.json..."
+          # Verificar que package-lock.json está presente y sincronizado
+          if [ ! -f package-lock.json ]; then
+            echo "❌ package-lock.json no encontrado"
+            exit 1
+          fi
+          echo "✅ package-lock.json presente — dependencias pinneadas"
+
+      # En producción real, aquí usaríamos Snyk, OWASP Dependency Check,
+      # o GitHub's Dependabot para análisis más profundo
+
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 5: CONSTRUCCIÓN DE IMAGEN DOCKER
+  # Solo se ejecuta en la rama main (no en cada PR)
+  # ──────────────────────────────────────────────────────────
+  docker-build:
+    name: "🐳 Build de Imagen Docker"
+    runs-on: ubuntu-latest
+    # Este job espera que TODOS los jobs anteriores pasen
+    needs: [code-quality, tests, security-sca]
+    # Solo construimos la imagen en la rama main
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Calcular la versión de la imagen usando el SHA corto del commit
+      # Esto permite trazabilidad: saber exactamente qué código está en cada imagen
+      - name: "🏷️ Calcular versión de imagen"
+        id: version
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "📌 Versión de imagen: $SHORT_SHA"
+
+      # Construir la imagen Docker
+      # En un proyecto real, aquí haríamos push al registry (Docker Hub, ECR, GCR)
+      # Para este demo, solo construimos localmente
+      - name: "🐳 Construir imagen Docker"
+        run: |
+          echo "🔨 Construyendo imagen Docker..."
+          docker build \
+            --tag ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.sha }} \
+            --tag ${{ env.IMAGE_NAME }}:latest \
+            --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            --build-arg VCS_REF=${{ github.sha }} \
+            .
+          echo "✅ Imagen construida: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.sha }}"
+
+      # Escanear la imagen Docker en busca de vulnerabilidades
+      # Trivy es un escáner de seguridad open-source de Aqua Security
+      - name: "🔍 Escanear imagen con Trivy (SAST de contenedor)"
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.IMAGE_NAME }}:latest"
+          format: "table"
+          exit-code: "0"          # No falla el pipeline (modo informativo)
+          severity: "CRITICAL,HIGH"
+          # En producción: exit-code: "1" para que falle si encuentra CVEs críticos
+
+      # Verificar que la imagen construida arranca correctamente
+      - name: "✅ Smoke test del contenedor"
+        run: |
+          echo "🧪 Iniciando contenedor para smoke test..."
+          docker run -d \
+            --name taskapi-test \
+            -p 3000:3000 \
+            -e NODE_ENV=test \
+            ${{ env.IMAGE_NAME }}:latest
+
+          echo "⏳ Esperando que el servicio inicie (10 segundos)..."
+          sleep 10
+
+          echo "🔍 Verificando health check..."
+          curl -f http://localhost:3000/ && echo "✅ Contenedor responde correctamente" || {
+            echo "❌ El contenedor no respondió"
+            docker logs taskapi-test
+            exit 1
+          }
+
+          docker stop taskapi-test
+          docker rm taskapi-test
+
+      # Guardar la imagen como artefacto (opcional para demo)
+      # En producción real: docker push al registry
+      - name: "💾 Información de la imagen generada"
+        run: |
+          echo "📋 Resumen de la imagen Docker:"
+          docker images ${{ env.IMAGE_NAME }}
+          echo ""
+          echo "🏷️  Tags generados:"
+          echo "   - ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.sha }}"
+          echo "   - ${{ env.IMAGE_NAME }}:latest"
+          echo ""
+          echo "📦 En producción, aquí se haría: docker push al registry"
+
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 6: VALIDACIÓN FINAL Y RESUMEN
+  # ──────────────────────────────────────────────────────────
+  pipeline-summary:
+    name: "📋 Resumen del Pipeline"
+    runs-on: ubuntu-latest
+    needs: [code-quality, tests, security-sca, docker-build]
+    if: always()   # Se ejecuta siempre, incluso si falló algo anterior
+
+    steps:
+      - name: "📋 Resumen del pipeline"
+        run: |
+          echo "============================================"
+          echo "  RESUMEN DEL PIPELINE CI/CD — TaskAPI"
+          echo "============================================"
+          echo ""
+          echo "📦 Instalación y Build:    ${{ needs.install-and-build.result }}"
+          echo "🔍 Calidad de Código:      ${{ needs.code-quality.result }}"
+          echo "🧪 Tests:                  ${{ needs.tests.result }}"
+          echo "🛡️  Seguridad (SCA):        ${{ needs.security-sca.result }}"
+          echo "🐳 Docker Build:           ${{ needs.docker-build.result }}"
+          echo ""
+          echo "Commit:  ${{ github.sha }}"
+          echo "Rama:    ${{ github.ref_name }}"
+          echo "Actor:   ${{ github.actor }}"
+          echo "Fecha:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "============================================"
+
+      # Notificación de éxito (en producción usaríamos Slack, Teams, PagerDuty)
+      - name: "🎉 Pipeline completado exitosamente"
+        if: needs.tests.result == 'success' && needs.security-sca.result == 'success'
+        run: |
+          echo "🎉 ¡Pipeline DevSecOps completado!"
+          echo "   El código pasó todas las validaciones de calidad y seguridad."
+          echo "   En producción, este es el punto donde se haría el deploy."
