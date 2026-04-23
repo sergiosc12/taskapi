@@ -42,5 +42,5 @@ app.use((err, req, res) => {
   console.error('[ERROR]', err.message);
   res.status(500).json({ error: 'Error interno del servidor' });
 });
-
+ 
 module.exports = app;
