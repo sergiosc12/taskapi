@@ -1,26 +1,6 @@
-# 🚀 TaskAPI — Demo DevOps & DevSecOps
+# TaskAPI — Demo DevOps & DevSecOps
 
-> **Proyecto académico** que demuestra la implementación de un pipeline CI/CD completo con prácticas de DevSecOps usando una API REST en Node.js.
-
-[![CI/CD Pipeline](https://github.com/TU_USUARIO/taskapi/actions/workflows/ci.yml/badge.svg)](https://github.com/TU_USUARIO/taskapi/actions)
-[![Node.js Version](https://img.shields.io/badge/node-20-brightgreen)](https://nodejs.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
----
-
-## 📋 Tabla de Contenidos
-
-1. [¿Qué es este proyecto?](#qué-es-este-proyecto)
-2. [Estructura del proyecto](#estructura-del-proyecto)
-3. [Cómo ejecutarlo localmente](#cómo-ejecutarlo-localmente)
-4. [Endpoints de la API](#endpoints-de-la-api)
-5. [Pipeline CI/CD explicado](#pipeline-cicd-explicado)
-6. [DevSecOps: Seguridad en el pipeline](#devsecops-seguridad-en-el-pipeline)
-7. [Docker](#docker)
-8. [Gestión de secretos](#gestión-de-secretos)
-9. [Buenas prácticas implementadas](#buenas-prácticas-implementadas)
-
----
+> demuestra la implementación de un pipeline CI/CD completo con prácticas de DevSecOps usando una API REST en Node.js.
 
 ## ¿Qué es este proyecto?
 
@@ -199,7 +179,6 @@ DESARROLLADOR
 **Qué es:** Prueba la aplicación mientras está ejecutándose.
 **Herramienta:** OWASP ZAP (en entorno de staging)
 **Detecta:** SQL Injection, XSS, problemas de autenticación en tiempo real
-> ⚠️ En este demo, el smoke test del contenedor es un DAST básico.
 
 ### Escaneo de contenedores
 **Herramienta:** Trivy (Aqua Security)
@@ -270,7 +249,7 @@ En el pipeline se usan así:
 Si un desarrollador agrega código con `eval()`:
 
 ```javascript
-// ❌ Código inseguro que el pipeline detecta
+// Código inseguro que el pipeline detecta
 const result = eval(userInput);  // Riesgo de code injection
 ```
 

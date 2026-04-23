@@ -1,10 +1,3 @@
-// ============================================================
-// routes/tasks.js — Definición de rutas del recurso "tasks"
-// ============================================================
-// El Router de Express agrupa las rutas relacionadas.
-// Aquí definimos los 4 endpoints del CRUD.
-// ============================================================
-
 const express = require('express');
 const router = express.Router();
 const taskController = require('../controllers/taskController');
