@@ -24,7 +24,7 @@ app.use('/api/tasks', taskRoutes);
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
-    message: 'TaskAPI funcionando correctamente 🚀',
+    message: 'TaskAPI funcionando correctamente',
     version: process.env.APP_VERSION || '1.0.0',
     environment: process.env.NODE_ENV || 'development',
   });
