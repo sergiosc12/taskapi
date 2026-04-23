@@ -1,6 +1,7 @@
 const express = require('express');
 const app = express();
 
+// Middlewares
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -16,6 +17,7 @@ app.use((req, res, next) => {
   next();
 });
 
+// Rutas
 const taskRoutes = require('./routes/tasks');
 app.use('/api/tasks', taskRoutes);
 
@@ -28,7 +30,15 @@ app.get('/', (req, res) => {
   });
 });
 
-app.use((err, req, res) => {
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    ok: true,
+    service: 'taskapi',
+  });
+});
+
+// Manejo de errores
+app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);
   res.status(500).json({ error: 'Error interno del servidor' });
 });

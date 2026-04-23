@@ -1,15 +1,18 @@
 name: "CI/CD Pipeline — TaskAPI DevSecOps"
+
 on:
   push:
     branches:
-      - main  
+      - main
       - develop
   pull_request:
     branches:
-      - main      
+      - main
+
 env:
   NODE_VERSION: "20"
   IMAGE_NAME: "taskapi"
+
 jobs:
   install-and-build:
     name: "Instalación y Build"
@@ -17,44 +20,54 @@ jobs:
     steps:
       - name: "Checkout del código"
         uses: actions/checkout@v4
+
       - name: "Configurar Node.js ${{ env.NODE_VERSION }}"
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
+
       - name: "Instalar dependencias"
         run: npm ci
+
       - name: "Verificar arranque de la aplicación"
         run: |
           node -e "require('./src/app'); console.log('App cargada sin errores')"
+
       - name: "Cachear dependencias instaladas"
         uses: actions/cache@v4
         with:
           path: node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
   code-quality:
     name: "Calidad de Código (SAST básico)"
     runs-on: ubuntu-latest
     needs: install-and-build
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: "Checkout del código"
+        uses: actions/checkout@v4
+
+      - name: "Configurar Node.js ${{ env.NODE_VERSION }}"
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-      - name: "📥 Instalar dependencias"
+
+      - name: "Instalar dependencias"
         run: npm ci
+
       - name: "Análisis estático con ESLint (SAST)"
         run: |
           echo "Ejecutando análisis estático de código..."
-          echo "   ESLint revisa el código sin ejecutarlo"
-          echo "   Busca errores, malas prácticas y riesgos de seguridad"
+          echo "ESLint revisa el código sin ejecutarlo"
+          echo "Busca errores, malas prácticas y riesgos de seguridad"
           npm run lint
           echo "Análisis SAST completado sin errores"
+
       - name: "Verificar secretos hardcodeados"
         run: |
           echo "Buscando posibles secretos en el código..."
-          # Busca patrones comunes de secretos (API keys, passwords hardcodeadas)
           if grep -rn --include="*.js" \
             -e "password\s*=\s*['\"][^'\"]\+['\"]" \
             -e "api_key\s*=\s*['\"][^'\"]\+['\"]" \
@@ -64,23 +77,30 @@ jobs:
             exit 1
           fi
           echo "No se encontraron secretos hardcodeados"
+
   tests:
     name: "Tests y Cobertura"
     runs-on: ubuntu-latest
     needs: install-and-build
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: "Checkout del código"
+        uses: actions/checkout@v4
+
+      - name: "Configurar Node.js ${{ env.NODE_VERSION }}"
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
+
       - name: "Instalar dependencias"
         run: npm ci
+
       - name: "Ejecutar tests con cobertura"
         run: |
           echo "Ejecutando suite de tests..."
           npm run test:ci
           echo "Todos los tests pasaron"
+
       - name: "Publicar reporte de cobertura"
         uses: actions/upload-artifact@v4
         if: always()
@@ -88,18 +108,24 @@ jobs:
           name: coverage-report
           path: coverage/
           retention-days: 30
+
   security-sca:
     name: "Análisis de Seguridad (SCA)"
     runs-on: ubuntu-latest
     needs: install-and-build
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: "Checkout del código"
+        uses: actions/checkout@v4
+
+      - name: "Configurar Node.js ${{ env.NODE_VERSION }}"
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
+
       - name: "Instalar dependencias"
         run: npm ci
+
       - name: "Auditoría de dependencias con npm audit (SCA)"
         run: |
           echo "Analizando dependencias en busca de vulnerabilidades..."
@@ -110,28 +136,32 @@ jobs:
             exit 1
           }
           echo "No se encontraron vulnerabilidades críticas"
+
       - name: "Verificar integridad de dependencias"
         run: |
           echo "Verificando integridad de package-lock.json..."
-          # Verificar que package-lock.json está presente y sincronizado
           if [ ! -f package-lock.json ]; then
             echo "package-lock.json no encontrado"
             exit 1
           fi
           echo "package-lock.json presente — dependencias pinneadas"
+
   docker-build:
     name: "Build de Imagen Docker"
     runs-on: ubuntu-latest
     needs: [code-quality, tests, security-sca]
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - name: "Checkout del código"
+        uses: actions/checkout@v4
+
       - name: "Calcular versión de imagen"
         id: version
         run: |
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
           echo "Versión de imagen: $SHORT_SHA"
+
       - name: "Construir imagen Docker"
         run: |
           echo "Construyendo imagen Docker..."
@@ -142,13 +172,15 @@ jobs:
             --build-arg VCS_REF=${{ github.sha }} \
             .
           echo "Imagen construida: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.sha }}"
-      - name: "Escanear imagen con Trivy (SAST de contenedor)"
+
+      - name: "Escanear imagen con Trivy"
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: "${{ env.IMAGE_NAME }}:latest"
           format: "table"
-          exit-code: "0"    
+          exit-code: "0"
           severity: "CRITICAL,HIGH"
+
       - name: "Smoke test del contenedor"
         run: |
           echo "Iniciando contenedor para smoke test..."
@@ -157,16 +189,20 @@ jobs:
             -p 3000:3000 \
             -e NODE_ENV=test \
             ${{ env.IMAGE_NAME }}:latest
-          echo "Esperando que el servicio inicie (10 segundos)..."
+
+          echo "Esperando que el servicio inicie..."
           sleep 10
+
           echo "Verificando health check..."
           curl -f http://localhost:3000/ && echo "Contenedor responde correctamente" || {
             echo "El contenedor no respondió"
             docker logs taskapi-test
             exit 1
           }
+
           docker stop taskapi-test
           docker rm taskapi-test
+
       - name: "Información de la imagen generada"
         run: |
           echo "Resumen de la imagen Docker:"
@@ -175,13 +211,24 @@ jobs:
           echo "Tags generados:"
           echo "- ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.sha }}"
           echo "- ${{ env.IMAGE_NAME }}:latest"
-          echo ""
-          echo "En producción, aquí se haría: docker push al registry"
+
+  deploy-render:
+    name: "Deploy a Render"
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: "Disparar deploy en Render"
+        run: |
+          echo "Iniciando despliegue en Render..."
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          echo "Deploy enviado correctamente a Render"
+
   pipeline-summary:
     name: "Resumen del Pipeline"
     runs-on: ubuntu-latest
-    needs: [code-quality, tests, security-sca, docker-build]
-    if: always() 
+    needs: [install-and-build, code-quality, tests, security-sca, docker-build, deploy-render]
+    if: always()
     steps:
       - name: "Resumen del pipeline"
         run: |
@@ -194,15 +241,16 @@ jobs:
           echo "Tests:                  ${{ needs.tests.result }}"
           echo "Seguridad (SCA):        ${{ needs.security-sca.result }}"
           echo "Docker Build:           ${{ needs.docker-build.result }}"
+          echo "Deploy Render:          ${{ needs.deploy-render.result }}"
           echo ""
           echo "Commit:  ${{ github.sha }}"
           echo "Rama:    ${{ github.ref_name }}"
           echo "Actor:   ${{ github.actor }}"
           echo "Fecha:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "============================================"
+
       - name: "Pipeline completado exitosamente"
-        if: needs.tests.result == 'success' && needs.security-sca.result == 'success'
+        if: needs.tests.result == 'success' && needs.security-sca.result == 'success' && needs.deploy-render.result == 'success'
         run: |
           echo "¡Pipeline DevSecOps completado!"
-          echo "El código pasó todas las validaciones de calidad y seguridad."
-          echo "En producción, este es el punto donde se haría el deploy."
+          echo "El código pasó calidad, seguridad y despliegue."
